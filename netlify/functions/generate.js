@@ -3,8 +3,9 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const busboy = require('busboy');
 
-const ALLOWED_ORIGIN = "*";
+const ALLOWED_ORIGIN = "*"; // Для разработки. В продакшене установите конкретный домен.
 
+// Хелпер для парсинга multipart/form-data в среде serverless
 function parseMultipartForm(event) {
     return new Promise((resolve, reject) => {
         const bb = busboy({
@@ -16,13 +17,10 @@ function parseMultipartForm(event) {
             fields: {}
         };
 
-        // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-        // Убраны дублирующиеся параметры. Оставлены только используемые.
         bb.on('file', (fieldname, file) => {
             const chunks = [];
             let fileMimeType = '';
             
-            // Получаем mimeType из потока, так как он доступен здесь
             file.on('data', (chunk) => {
                 if (!fileMimeType && file.mimeType) {
                     fileMimeType = file.mimeType;
@@ -53,6 +51,7 @@ function parseMultipartForm(event) {
 
 
 exports.handler = async (event) => {
+    // CORS Preflight
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 204,
@@ -87,26 +86,38 @@ exports.handler = async (event) => {
         const contentType = event.headers['content-type'] || event.headers['Content-Type'];
 
         if (contentType && contentType.startsWith('multipart/form-data')) {
+            console.log('[Backend Debug] Multipart-запрос получен. Начинаю парсинг...');
             const parsed = await parseMultipartForm(event);
             const prompt = parsed.fields.prompt;
             const audioFile = parsed.files.find(f => f.fieldname === 'audio');
 
-            if (!audioFile) {
-                throw new Error("Аудиофайл не найден в запросе.");
+            // --- ОТЛАДОЧНЫЕ ЛОГИ ---
+            if (audioFile) {
+                console.log(`[Backend Debug] ✅ Найден аудиофайл. Размер: ${audioFile.content.length} байт, MIME-тип: ${audioFile.mimeType}`);
+            } else {
+                console.error('[Backend Debug] ❌ ОШИБКА: Аудиофайл НЕ НАЙДЕН в запросе!');
             }
-            if (!prompt) {
-                throw new Error("Текстовый промпт не найден в multipart-запросе.");
+            if (prompt) {
+                console.log('[Backend Debug] ✅ Найден промпт.');
+            } else {
+                console.error('[Backend Debug] ❌ ОШИБКА: Промпт НЕ НАЙДЕН в запросе!');
+            }
+            // --- КОНЕЦ ОТЛАДОЧНЫХ ЛОГОВ ---
+            
+            if (!audioFile || !prompt) {
+                throw new Error("Неполные данные в multipart-запросе.");
             }
 
             requestParts.push(prompt);
             requestParts.push({
                 inlineData: {
                     data: audioFile.content.toString('base64'),
-                    mimeType: audioFile.mimeType || 'audio/webm', // Fallback
+                    mimeType: audioFile.mimeType || 'audio/webm',
                 },
             });
 
         } else if (contentType && contentType.startsWith('application/json')) {
+            console.log('[Backend Debug] Получен JSON-запрос.');
             const body = JSON.parse(event.body);
             const prompt = body.prompt;
             if (!prompt) throw new Error("Промпт не предоставлен.");
@@ -115,7 +126,8 @@ exports.handler = async (event) => {
         } else {
             throw new Error(`Неподдерживаемый или отсутствующий Content-Type: ${contentType}`);
         }
-
+        
+        console.log(`[Backend Debug] Отправляю в Gemini API запрос из ${requestParts.length} частей.`);
         const result = await model.generateContent(requestParts);
         const response = await result.response;
         const text = response.text();
