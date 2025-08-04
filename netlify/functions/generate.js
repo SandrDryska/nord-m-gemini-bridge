@@ -1,42 +1,55 @@
 // netlify/functions/generate.js
-const fetch = require('node-fetch'); // для Node.js < 18
+
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const busboy = require('busboy');
 
-// Определите разрешенные origins. Для тестирования можно '*', но будьте осторожны.
-// Для Storyline, запускаемого локально, origin может быть 'null'.
-// Для LMS - это будет домен вашей LMS.
-// Вы можете получить его из event.headers.origin в самой функции при запросе.
-const ALLOWED_ORIGINS = [
-    "null", // Для локального тестирования Storyline (file://)
-    "https://your-lms-domain.com", // Замените на домен вашей LMS
-    "https://app.netlify.com", // Для тестов из интерфейса Netlify
-    // Добавьте сюда домен, с которого вы сейчас тестируете (например, если он статичен)
-    // Или используйте '*' для тестирования, НО ЭТО НЕБЕЗОПАСНО ДЛЯ ПРОДАКШЕНА С API КЛЮЧАМИ
-    // Лучше всего динамически проверять event.headers.origin и разрешать только нужные.
-    // "https://timely-smakager-d28608.netlify.app" // Сам ваш сайт, если он тоже делает запросы
-];
+const ALLOWED_ORIGIN = "*"; // Для разработки. В продакшене установите конкретный домен.
+
+// Хелпер для парсинга multipart/form-data в среде serverless
+function parseMultipartForm(event) {
+    return new Promise((resolve, reject) => {
+        const bb = busboy({
+            headers: { 'content-type': event.headers['content-type'] || event.headers['Content-Type'] }
+        });
+
+        const result = {
+            files: [],
+            fields: {}
+        };
+
+        bb.on('file', (fieldname, file, G, G, G) => {
+            const chunks = [];
+            file.on('data', (chunk) => chunks.push(chunk));
+            file.on('end', () => {
+                result.files.push({
+                    fieldname,
+                    content: Buffer.concat(chunks),
+                    mimeType: file.mimeType
+                });
+            });
+        });
+
+        bb.on('field', (fieldname, val) => {
+            result.fields[fieldname] = val;
+        });
+        
+        bb.on('close', () => resolve(result));
+        bb.on('error', err => reject(err));
+
+        // Конвертируем body в Buffer для busboy
+        const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
+        bb.end(bodyBuffer);
+    });
+}
 
 
-exports.handler = async (event, context) => {
-    // Определяем origin текущего запроса
-    const requestOrigin = event.headers.origin;
-    let accessControlAllowOriginHeader = "";
-
-    // Проверяем, входит ли origin запроса в список разрешенных
-    // Или если мы разрешаем все для тестирования (не рекомендуется для продакшена)
-    // if (ALLOWED_ORIGINS.includes(requestOrigin) || ALLOWED_ORIGINS.includes("*")) {
-    //   accessControlAllowOriginHeader = requestOrigin; // Отражаем origin запроса
-    // }
-    // ДЛЯ ТЕСТИРОВАНИЯ сейчас поставим '*', потом поменяем на более безопасный вариант
-    accessControlAllowOriginHeader = "*";
-
-
-    // Обработка OPTIONS-запроса (preflight)
+exports.handler = async (event) => {
+    // CORS Preflight
     if (event.httpMethod === 'OPTIONS') {
         return {
-            statusCode: 204, // No Content
+            statusCode: 204,
             headers: {
-                'Access-Control-Allow-Origin': accessControlAllowOriginHeader,
+                'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
                 'Access-Control-Allow-Headers': 'Content-Type',
                 'Access-Control-Allow-Methods': 'POST, OPTIONS',
             },
@@ -44,72 +57,76 @@ exports.handler = async (event, context) => {
         };
     }
 
-    if (event.httpMethod !== 'POST') {
-        return {
-            statusCode: 405,
-            headers: { 'Access-Control-Allow-Origin': accessControlAllowOriginHeader },
-            body: JSON.stringify({ error: 'Method Not Allowed' }),
-        };
-    }
+    const headers = {
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+        'Content-Type': 'application/json',
+    };
 
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    }
+    
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        console.error("GEMINI_API_KEY не установлен!");
-        return {
-            statusCode: 500,
-            headers: { 'Access-Control-Allow-Origin': accessControlAllowOriginHeader },
-            body: JSON.stringify({ error: 'API ключ не сконфигурирован на сервере.' }),
-        };
-    }
-
-    let prompt;
-    try {
-        const body = JSON.parse(event.body);
-        prompt = body.prompt;
-        if (!prompt) {
-            return {
-                statusCode: 400,
-                headers: { 'Access-Control-Allow-Origin': accessControlAllowOriginHeader },
-                body: JSON.stringify({ error: 'Промпт не предоставлен в теле запроса.' }),
-            };
-        }
-    } catch (e) {
-        return {
-            statusCode: 400,
-            headers: { 'Access-Control-Allow-Origin': accessControlAllowOriginHeader },
-            body: JSON.stringify({ error: 'Некорректный JSON в теле запроса.' }),
-        };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'API ключ не сконфигурирован.' }) };
     }
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // Используем модель, поддерживающую мультимодальность
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const result = await model.generateContent(prompt);
+        let prompt;
+        let requestParts = [];
+
+        const contentType = event.headers['content-type'] || event.headers['Content-Type'];
+
+        // --- Определение типа запроса ---
+        if (contentType.startsWith('multipart/form-data')) {
+            // Аудио + Текст
+            const parsed = await parseMultipartForm(event);
+            prompt = parsed.fields.prompt;
+            const audioFile = parsed.files.find(f => f.fieldname === 'audio');
+
+            if (!audioFile) {
+                throw new Error("Аудиофайл не найден в запросе.");
+            }
+
+            requestParts.push(prompt);
+            requestParts.push({
+                inlineData: {
+                    data: audioFile.content.toString('base64'),
+                    mimeType: audioFile.mimeType,
+                },
+            });
+
+        } else if (contentType.startsWith('application/json')) {
+            // Только Текст
+            const body = JSON.parse(event.body);
+            prompt = body.prompt;
+            if (!prompt) throw new Error("Промпт не предоставлен.");
+            requestParts.push(prompt);
+
+        } else {
+            throw new Error(`Неподдерживаемый Content-Type: ${contentType}`);
+        }
+
+        const result = await model.generateContent(requestParts);
         const response = await result.response;
         const text = response.text();
 
         return {
             statusCode: 200,
-            headers: {
-                "Content-Type": "application/json",
-                'Access-Control-Allow-Origin': accessControlAllowOriginHeader,
-            },
+            headers,
             body: JSON.stringify({ generatedText: text }),
         };
+
     } catch (error) {
-        console.error('Ошибка при вызове Gemini API:', error);
-        let errorMessage = 'Не удалось сгенерировать ответ от AI.';
-        if (error.message) {
-            errorMessage += ` Детали: ${error.message}`;
-        }
+        console.error('Ошибка в функции:', error);
         return {
             statusCode: 500,
-            headers: {
-                "Content-Type": "application/json",
-                'Access-Control-Allow-Origin': accessControlAllowOriginHeader,
-            },
-            body: JSON.stringify({ error: errorMessage }),
+            headers,
+            body: JSON.stringify({ error: error.message || 'Внутренняя ошибка сервера.' }),
         };
     }
 };
