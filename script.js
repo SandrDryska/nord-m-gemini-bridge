@@ -4,7 +4,9 @@ const PARENT_WINDOW_ORIGIN = '*'; // В продакшене замените н
 
 let mediaRecorder;
 let audioChunks = [];
-let currentAudioPrompt = ""; // Промпт, который будет отправлен вместе с аудио
+let currentAudioPrompt = "";
+let recordedAudioBlob = null; // Будет хранить записанный Blob для прослушивания/отправки
+let audioPreviewElement = null; // Элемент для проигрывания
 
 // --- Функции обратной связи со Storyline ---
 function postStatusToParent(type, payload) {
@@ -14,21 +16,23 @@ function postStatusToParent(type, payload) {
     console.log(`Sending to parent: ${type}`, payload);
 }
 
-// --- Логика записи аудио ---
+// --- Логика записи и управления аудио ---
+
 async function startRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
-        audioChunks = []; // Очищаем массив
+        audioChunks = [];
+        recordedAudioBlob = null; // Сбрасываем предыдущую запись
 
         mediaRecorder.ondataavailable = event => {
             audioChunks.push(event.data);
         };
 
+        // МОДИФИКАЦИЯ: Теперь onstop не отправляет, а сохраняет аудио и уведомляет Storyline
         mediaRecorder.onstop = () => {
-            postStatusToParent('recordingState', { status: 'processing', message: 'Обработка аудио...' });
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            sendAudioToBackend(currentAudioPrompt, audioBlob); // Используем специализированную функцию
+            recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            postStatusToParent('recordingState', { status: 'recorded', message: 'Запись завершена. Готово к прослушиванию или отправке.' });
         };
         
         mediaRecorder.start();
@@ -41,11 +45,38 @@ async function startRecording() {
 
 function stopRecording() {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
+        mediaRecorder.stop(); // Это вызовет onstop
     } else {
         postStatusToParent('error', { context: 'recorder_stop', message: 'Запись не была активна.' });
     }
 }
+
+// НОВАЯ ФУНКЦИЯ: Прослушивание
+function playPreview() {
+    if (!recordedAudioBlob) {
+        postStatusToParent('error', { context: 'playback', message: 'Нет записанного аудио для прослушивания.' });
+        return;
+    }
+    if (!audioPreviewElement) {
+        audioPreviewElement = new Audio();
+        audioPreviewElement.onended = () => postStatusToParent('playbackState', { status: 'stopped' });
+    }
+    audioPreviewElement.src = URL.createObjectURL(recordedAudioBlob);
+    audioPreviewElement.play();
+    postStatusToParent('playbackState', { status: 'playing' });
+}
+
+// НОВАЯ ФУНКЦИЯ: Отправка сохраненного аудио
+function sendRecordedAudio() {
+    if (!recordedAudioBlob) {
+        postStatusToParent('error', { context: 'send_audio', message: 'Нет записанного аудио для отправки.' });
+        return;
+    }
+    // Используем существующую функцию отправки
+    sendAudioToBackend(currentAudioPrompt, recordedAudioBlob);
+    recordedAudioBlob = null; // Очищаем после отправки
+}
+
 
 // --- Обработчик сообщений от Storyline ---
 window.addEventListener('message', (event) => {
@@ -55,22 +86,29 @@ window.addEventListener('message', (event) => {
     const { type, payload } = event.data;
 
     switch (type) {
-        // --- НОВЫЙ ПАЙПЛАЙН: ТОЛЬКО ТЕКСТ ---
+        // --- ПАЙПЛАЙН: ТОЛЬКО ТЕКСТ ---
         case 'sendTextOnly':
             postStatusToParent('bridgeStatus', `Текстовый запрос получен: "${payload}". Отправка...`);
             sendTextToBackend(payload);
             break;
 
         // --- ПАЙПЛАЙН С АУДИО ---
-        case 'setAudioPrompt': // 1. Установить текст для аудио
+        case 'setAudioPrompt':
             currentAudioPrompt = payload;
-            postStatusToParent('bridgeStatus', `Промпт для аудио "${payload}" установлен. Мост готов к записи.`);
+            postStatusToParent('bridgeStatus', `Промпт для аудио "${payload}" установлен.`);
             break;
-        case 'startRecording': // 2. Начать запись
+        case 'startRecording':
             startRecording();
             break;
-        case 'stopRecording':  // 3. Остановить и отправить
+        case 'stopRecording':
             stopRecording();
+            break;
+        // НОВЫЕ КОМАНДЫ ДЛЯ УПРАВЛЕНИЯ АУДИО
+        case 'playPreview':
+            playPreview();
+            break;
+        case 'sendRecordedAudio':
+            sendRecordedAudio();
             break;
     }
 });
@@ -112,6 +150,7 @@ async function sendTextToBackend(prompt) {
  * @param {Blob} audioBlob - Аудиоданные.
  */
 async function sendAudioToBackend(prompt, audioBlob) {
+    postStatusToParent('recordingState', { status: 'processing', message: 'Отправка аудио на сервер...' });
     const formData = new FormData();
     formData.append('prompt', prompt);
     formData.append('audio', audioBlob, 'recording.webm');
