@@ -1,0 +1,15 @@
+[build]
+  # Команда для сборки (если есть). Для нашего простого случая не нужна.
+  # command = "npm run build" 
+  
+  # Папка, откуда будут браться статические файлы сайта (index.html, script.js)
+  publish = "."  # Указывает, что корневая папка и есть папка для публикации
+  
+  # Папка, где Netlify будет искать ваши serverless функции
+  functions = "netlify/functions"
+
+# Опционально: если хотите, чтобы Node.js на Netlify был определенной версии (для функций)
+# [functions]
+#   node_bundler = "esbuild" # или "zisi"
+# [build.environment]
+#   NODE_VERSION = "18" # или "16", "20" и т.д.

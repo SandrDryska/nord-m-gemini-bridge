@@ -1,0 +1,16 @@
+{
+  "name": "gemini-storyline-bridge",
+  "version": "1.0.0",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "node-fetch": "^2.7.0"
+  }
+}
