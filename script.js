@@ -135,6 +135,9 @@ async function sendTextToBackend(prompt) {
             throw new Error(data.error || `Ошибка сервера: ${response.status}`);
         }
 
+        if (data && data.provider) {
+            console.log(`[Bridge] Provider used: ${data.provider}`);
+        }
         postStatusToParent('geminiResponse', data.generatedText);
         postStatusToParent('requestState', { status: 'idle', message: 'Готов к новому запросу.' });
 
@@ -166,6 +169,9 @@ async function sendAudioToBackend(prompt, audioBlob) {
             throw new Error(data.error || `Ошибка сервера: ${response.status}`);
         }
 
+        if (data && data.provider) {
+            console.log(`[Bridge] Provider used: ${data.provider}`);
+        }
         postStatusToParent('geminiResponse', data.generatedText);
         postStatusToParent('recordingState', { status: 'idle', message: 'Готов к новой записи.' });
 

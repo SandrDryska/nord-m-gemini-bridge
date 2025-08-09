@@ -93,7 +93,7 @@ exports.handler = async (event) => {
                 console.log('[Provider] gemini (audio pipeline)');
                 text = await generateTextWithGeminiAndAudio(geminiApiKey, prompt, audioBase64);
             }
-            return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };
 
         } else if (contentType && contentType.startsWith('application/json')) {
             const body = JSON.parse(event.body);
@@ -121,7 +121,7 @@ exports.handler = async (event) => {
             text = await generateTextWithGemini(geminiApiKey, requestParts[0]);
         }
 
-        return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };
 
     } catch (error) {
         console.error('Ошибка в функции:', error);
