@@ -3,22 +3,24 @@ async function generateTextWithOpenAI(apiKey, prompt) {
   const fallbackModel = "gpt-4o-mini";
   let modelUsed = primaryModel;
 
+  const primaryBody = { model: primaryModel, messages: [{ role: "user", content: prompt }] };
   let response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ model: primaryModel, messages: [{ role: "user", content: prompt }], temperature: 0.7 }),
+    body: JSON.stringify(primaryBody),
   });
   if (!response.ok && [400, 404, 422].includes(response.status)) {
     const errText = await safeReadText(response);
     console.warn(`[OpenAI] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Details: ${errText}`);
     modelUsed = fallbackModel;
+    const fallbackBody = { model: fallbackModel, messages: [{ role: "user", content: prompt }], temperature: 0.7 };
     response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: fallbackModel, messages: [{ role: "user", content: prompt }], temperature: 0.7 }),
+      body: JSON.stringify(fallbackBody),
     });
   }
   if (!response.ok) {
