@@ -1,2 +1,18 @@
+# Dependencies
+node_modules/
+
+# Local env/config
+.env
+.env.*
+
+# Storyline assets (not for git)
+storyline not for git/
+storyline not for git/**
+
+# OS/Editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
 node_modules/
 .DS_Store
