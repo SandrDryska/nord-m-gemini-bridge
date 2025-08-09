@@ -9,7 +9,7 @@
   functions = "netlify/functions"
 
 # Опционально: если хотите, чтобы Node.js на Netlify был определенной версии (для функций)
-# [functions]
-#   node_bundler = "esbuild" # или "zisi"
-# [build.environment]
-#   NODE_VERSION = "18" # или "16", "20" и т.д.
+[functions]
+  node_bundler = "esbuild"
+[build.environment]
+  NODE_VERSION = "18"

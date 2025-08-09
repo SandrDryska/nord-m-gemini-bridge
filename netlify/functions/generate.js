@@ -1,7 +1,8 @@
 // netlify/functions/generate.js
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const busboy = require('busboy');
+const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./providers/gemini');
+const { generateTextWithOpenAI } = require('./providers/openai');
 
 const ALLOWED_ORIGIN = "*";
 
@@ -60,15 +61,11 @@ exports.handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
     
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: 'API ключ не сконфигурирован.' }) };
-    }
+    const provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const openaiApiKey = process.env.OPENAI_API_KEY;
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
         let requestParts = [];
         const contentType = event.headers['content-type'] || event.headers['Content-Type'];
 
@@ -81,15 +78,21 @@ exports.handler = async (event) => {
                 throw new Error("Неполные данные в multipart-запросе.");
             }
 
-            requestParts.push(prompt);
-            requestParts.push({
-                inlineData: {
-                    data: audioFile.content.toString('base64'),
-                    // --- ГЛАВНОЕ ИЗМЕНЕНИЕ ---
-                    // Мы принудительно устанавливаем MIME-тип, который ожидает API.
-                    mimeType: 'audio/webm',
-                },
-            });
+            if (provider !== 'gemini') {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Для текущего провайдера аудио не поддерживается. Используйте текстовый запрос.' }) };
+            }
+
+            if (!geminiApiKey) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
+            }
+
+            const audioBase64 = audioFile.content.toString('base64');
+            const text = await generateTextWithGeminiAndAudio(geminiApiKey, prompt, audioBase64);
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ generatedText: text }),
+            };
 
         } else if (contentType && contentType.startsWith('application/json')) {
             const body = JSON.parse(event.body);
@@ -100,16 +103,22 @@ exports.handler = async (event) => {
         } else {
             throw new Error(`Неподдерживаемый или отсутствующий Content-Type: ${contentType}`);
         }
-        
-        const result = await model.generateContent(requestParts);
-        const response = await result.response;
-        const text = response.text();
 
-        return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({ generatedText: text }),
-        };
+        // Текстовый путь
+        let text;
+        if (provider === 'openai') {
+            if (!openaiApiKey) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
+            }
+            text = await generateTextWithOpenAI(openaiApiKey, requestParts[0]);
+        } else {
+            if (!geminiApiKey) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
+            }
+            text = await generateTextWithGemini(geminiApiKey, requestParts[0]);
+        }
+
+        return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text }) };
 
     } catch (error) {
         console.error('Ошибка в функции:', error);
