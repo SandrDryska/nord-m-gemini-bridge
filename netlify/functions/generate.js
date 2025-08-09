@@ -2,7 +2,7 @@
 
 const busboy = require('busboy');
 const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./providers/gemini');
-const { generateTextWithOpenAI } = require('./providers/openai');
+const { generateTextWithOpenAI, generateTextWithOpenAIAndAudio } = require('./providers/openai');
 
 const ALLOWED_ORIGIN = "*";
 
@@ -78,21 +78,22 @@ exports.handler = async (event) => {
                 throw new Error("Неполные данные в multipart-запросе.");
             }
 
-            if (provider !== 'gemini') {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Для текущего провайдера аудио не поддерживается. Используйте текстовый запрос.' }) };
-            }
-
-            if (!geminiApiKey) {
-                return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
-            }
-
             const audioBase64 = audioFile.content.toString('base64');
-            const text = await generateTextWithGeminiAndAudio(geminiApiKey, prompt, audioBase64);
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({ generatedText: text }),
-            };
+            let text;
+            if (provider === 'openai') {
+                if (!openaiApiKey) {
+                    return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
+                }
+                console.log('[Provider] openai (audio pipeline)');
+                text = await generateTextWithOpenAIAndAudio(openaiApiKey, prompt, audioBase64);
+            } else {
+                if (!geminiApiKey) {
+                    return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
+                }
+                console.log('[Provider] gemini (audio pipeline)');
+                text = await generateTextWithGeminiAndAudio(geminiApiKey, prompt, audioBase64);
+            }
+            return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text }) };
 
         } else if (contentType && contentType.startsWith('application/json')) {
             const body = JSON.parse(event.body);
@@ -110,11 +111,13 @@ exports.handler = async (event) => {
             if (!openaiApiKey) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
             }
+            console.log('[Provider] openai (text pipeline)');
             text = await generateTextWithOpenAI(openaiApiKey, requestParts[0]);
         } else {
             if (!geminiApiKey) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
             }
+            console.log('[Provider] gemini (text pipeline)');
             text = await generateTextWithGemini(geminiApiKey, requestParts[0]);
         }
 
