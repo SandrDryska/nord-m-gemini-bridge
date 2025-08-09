@@ -137,7 +137,10 @@ async function sendTextToBackend(prompt) {
 
         console.log('[Bridge] Raw response:', data);
         if (data && typeof data.provider !== 'undefined') console.log(`[Bridge] Provider used: ${data.provider}`);
-        if (data && Object.prototype.hasOwnProperty.call(data, 'transcript')) console.log(`[Bridge] Transcript: ${data.transcript}`);
+        if (data && Object.prototype.hasOwnProperty.call(data, 'transcript')) {
+            console.log(`[Bridge] Transcript: ${data.transcript}`);
+            postStatusToParent('transcription', data.transcript ?? '');
+        }
         postStatusToParent('geminiResponse', data.generatedText);
         postStatusToParent('requestState', { status: 'idle', message: 'Готов к новому запросу.' });
 
@@ -171,7 +174,10 @@ async function sendAudioToBackend(prompt, audioBlob) {
 
         console.log('[Bridge] Raw response:', data);
         if (data && typeof data.provider !== 'undefined') console.log(`[Bridge] Provider used: ${data.provider}`);
-        if (data && Object.prototype.hasOwnProperty.call(data, 'transcript')) console.log(`[Bridge] Transcript: ${data.transcript}`);
+        if (data && Object.prototype.hasOwnProperty.call(data, 'transcript')) {
+            console.log(`[Bridge] Transcript: ${data.transcript}`);
+            postStatusToParent('transcription', data.transcript ?? '');
+        }
         postStatusToParent('geminiResponse', data.generatedText);
         postStatusToParent('recordingState', { status: 'idle', message: 'Готов к новой записи.' });
 
