@@ -80,12 +80,15 @@ exports.handler = async (event) => {
 
             const audioBase64 = audioFile.content.toString('base64');
             let text;
+            let transcript;
             if (provider === 'openai') {
                 if (!openaiApiKey) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
                 }
                 console.log('[Provider] openai (audio pipeline)');
-                text = await generateTextWithOpenAIAndAudio(openaiApiKey, prompt, audioBase64);
+                const res = await generateTextWithOpenAIAndAudio(openaiApiKey, prompt, audioBase64);
+                text = typeof res === 'string' ? res : res.message;
+                transcript = typeof res === 'object' ? res.transcript : undefined;
             } else {
                 if (!geminiApiKey) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
@@ -93,7 +96,7 @@ exports.handler = async (event) => {
                 console.log('[Provider] gemini (audio pipeline)');
                 text = await generateTextWithGeminiAndAudio(geminiApiKey, prompt, audioBase64);
             }
-            return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider, transcript }) };
 
         } else if (contentType && contentType.startsWith('application/json')) {
             const body = JSON.parse(event.body);

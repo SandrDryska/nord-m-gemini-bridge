@@ -127,7 +127,12 @@ async function generateTextWithOpenAIAndAudio(apiKey, prompt, audioBase64) {
   }
   const message = chatData.choices?.[0]?.message?.content ?? "";
   console.log(`[OpenAI] Text generation model: ${textModelUsed}`);
-  return message;
+  return {
+    message,
+    transcript: transcriptText,
+    transcribeModel: transcribeUsed,
+    textModel: textModelUsed,
+  };
 }
 
 async function safeReadText(res) {
