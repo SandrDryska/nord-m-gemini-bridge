@@ -3,7 +3,7 @@ async function generateTextWithOpenAI(apiKey, prompt) {
   const fallbackModel = "gpt-4o-mini";
   let modelUsed = primaryModel;
 
-  const primaryBody = { model: primaryModel, messages: [{ role: "user", content: prompt }] };
+  const primaryBody = { model: primaryModel, messages: [{ role: "user", content: prompt }], temperature: 1 };
   let response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -16,7 +16,7 @@ async function generateTextWithOpenAI(apiKey, prompt) {
     const errText = await safeReadText(response);
     console.warn(`[OpenAI] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Details: ${errText}`);
     modelUsed = fallbackModel;
-    const fallbackBody = { model: fallbackModel, messages: [{ role: "user", content: prompt }], temperature: 0.7 };
+    const fallbackBody = { model: fallbackModel, messages: [{ role: "user", content: prompt }], temperature: 1 };
     response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -97,7 +97,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, prompt, audioBase64) {
           content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}`,
         },
       ],
-      temperature: 0.7,
+      temperature: 1,
     }),
   });
   let chatData;
@@ -113,7 +113,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, prompt, audioBase64) {
         messages: [
           { role: "user", content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` },
         ],
-        temperature: 0.7,
+        temperature: 1,
       }),
     });
     if (!chatResponse2.ok) {
