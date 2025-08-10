@@ -1,9 +1,14 @@
-async function generateTextWithOpenAI(apiKey, prompt) {
+async function generateTextWithOpenAI(apiKey, input) {
+  const { prompt, system } = normalizeInput(input);
   const primaryModel = "gpt-5-nano-2025-08-07";
   const fallbackModel = "gpt-4o-mini";
   let modelUsed = primaryModel;
 
-  const primaryBody = { model: primaryModel, messages: [{ role: "user", content: prompt }], temperature: 1 };
+  const messages = system ? [
+    { role: 'system', content: system },
+    { role: 'user', content: prompt },
+  ] : [ { role: 'user', content: prompt } ];
+  const primaryBody = { model: primaryModel, messages, temperature: 1 };
   let response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -16,7 +21,7 @@ async function generateTextWithOpenAI(apiKey, prompt) {
     const errText = await safeReadText(response);
     console.warn(`[OpenAI] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Details: ${errText}`);
     modelUsed = fallbackModel;
-    const fallbackBody = { model: fallbackModel, messages: [{ role: "user", content: prompt }], temperature: 1 };
+    const fallbackBody = { model: fallbackModel, messages, temperature: 1 };
     response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -33,7 +38,8 @@ async function generateTextWithOpenAI(apiKey, prompt) {
   return message;
 }
 
-async function generateTextWithOpenAIAndAudio(apiKey, prompt, audioBase64) {
+async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
+  const { prompt, system } = normalizeInput(input);
   // 1) Транскрипция
   const primaryTranscribe = "gpt-4o-mini-transcribe";
   const fallbackTranscribe = "whisper-1";
@@ -91,12 +97,9 @@ async function generateTextWithOpenAIAndAudio(apiKey, prompt, audioBase64) {
     },
     body: JSON.stringify({
       model: primaryModel,
-      messages: [
-        {
-          role: "user",
-          content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}`,
-        },
-      ],
+      messages: system
+        ? [ { role: 'system', content: system }, { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ]
+        : [ { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ],
       temperature: 1,
     }),
   });
@@ -110,9 +113,9 @@ async function generateTextWithOpenAIAndAudio(apiKey, prompt, audioBase64) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: fallbackModel,
-        messages: [
-          { role: "user", content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` },
-        ],
+        messages: system
+          ? [ { role: 'system', content: system }, { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ]
+          : [ { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ],
         temperature: 1,
       }),
     });
@@ -143,6 +146,13 @@ async function safeReadText(res) {
   } catch (_) {
     return "(no body)";
   }
+}
+
+function normalizeInput(input) {
+  if (typeof input === 'string') {
+    return { prompt: input, system: '' };
+  }
+  return { prompt: input?.prompt || '', system: input?.system || '' };
 }
 
 module.exports = {

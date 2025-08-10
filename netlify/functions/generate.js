@@ -72,6 +72,7 @@ exports.handler = async (event) => {
         if (contentType && contentType.startsWith('multipart/form-data')) {
             const parsed = await parseMultipartForm(event);
             const prompt = parsed.fields.prompt;
+            const system = parsed.fields.system;
             const audioFile = parsed.files.find(f => f.fieldname === 'audio');
             
             if (!audioFile || !prompt) {
@@ -86,7 +87,7 @@ exports.handler = async (event) => {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
                 }
                 console.log('[Provider] openai (audio pipeline)');
-                const res = await generateTextWithOpenAIAndAudio(openaiApiKey, prompt, audioBase64);
+                const res = await generateTextWithOpenAIAndAudio(openaiApiKey, { prompt, system }, audioBase64);
                 text = typeof res === 'string' ? res : res.message;
                 transcript = typeof res === 'object' ? res.transcript : undefined;
             } else {
@@ -94,13 +95,14 @@ exports.handler = async (event) => {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
                 }
                 console.log('[Provider] gemini (audio pipeline)');
-                text = await generateTextWithGeminiAndAudio(geminiApiKey, prompt, audioBase64);
+                text = await generateTextWithGeminiAndAudio(geminiApiKey, { prompt, system }, audioBase64);
             }
             return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider, transcript }) };
 
         } else if (contentType && contentType.startsWith('application/json')) {
             const body = JSON.parse(event.body);
             const prompt = body.prompt;
+            var system = body.system;
             if (!prompt) throw new Error("Промпт не предоставлен.");
             requestParts.push(prompt);
 
@@ -115,13 +117,13 @@ exports.handler = async (event) => {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
             }
             console.log('[Provider] openai (text pipeline)');
-            text = await generateTextWithOpenAI(openaiApiKey, requestParts[0]);
+            text = await generateTextWithOpenAI(openaiApiKey, { prompt: requestParts[0], system });
         } else {
             if (!geminiApiKey) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
             }
             console.log('[Provider] gemini (text pipeline)');
-            text = await generateTextWithGemini(geminiApiKey, requestParts[0]);
+            text = await generateTextWithGemini(geminiApiKey, { prompt: requestParts[0], system });
         }
 
         return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };
