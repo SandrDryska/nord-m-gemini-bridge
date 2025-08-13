@@ -83,4 +83,53 @@ function normalizeInput(input) {
 
 module.exports = { generateTextWithYandex };
 
+// --- AUDIO PIPELINE ---
+async function transcribeWithYandexSTT(apiKey, folderId, audioBuffer, opts = {}) {
+	// По умолчанию считаем, что пишем в OGG/Opus 48kHz
+	const lang = opts.lang || 'ru-RU';
+	const format = opts.format || 'oggopus';
+	const sampleRateHertz = opts.sampleRateHertz || 48000;
+
+	const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${encodeURIComponent(folderId)}&lang=${encodeURIComponent(lang)}&format=${encodeURIComponent(format)}&sampleRateHertz=${encodeURIComponent(String(sampleRateHertz))}`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: {
+			Authorization: `Api-Key ${apiKey}`,
+			'Content-Type': 'application/octet-stream',
+		},
+		body: audioBuffer,
+	});
+	if (!response.ok) {
+		const errText = await safeReadText(response);
+		throw new Error(`Yandex STT error ${response.status}: ${errText}`);
+	}
+	const data = await response.json().catch(() => null);
+	if (!data) {
+		// Некоторые ответы могут приходить в text/plain, попробуем text()
+		const txt = await response.text();
+		try {
+			const parsed = JSON.parse(txt);
+			return parsed.result || '';
+		} catch (_) {
+			return '';
+		}
+	}
+	return data.result || '';
+}
+
+async function generateTextWithYandexAndAudio(apiKey, folderId, input, audioBase64, sttOpts) {
+	const audioBuffer = Buffer.from(audioBase64, 'base64');
+	const transcript = await transcribeWithYandexSTT(apiKey, folderId, audioBuffer, sttOpts);
+	const { prompt, system } = normalizeInput(input);
+	const mergedPrompt = system
+		? `${prompt}\n\nТранскрипция аудио:\n${transcript}`
+		: `${prompt}\n\nТранскрипция аудио:\n${transcript}`;
+
+	const text = await generateTextWithYandex(apiKey, folderId, { prompt: mergedPrompt, system });
+	return { message: text, transcript };
+}
+
+module.exports.generateTextWithYandexAndAudio = generateTextWithYandexAndAudio;
+
 

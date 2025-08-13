@@ -3,7 +3,7 @@
 const busboy = require('busboy');
 const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./providers/gemini');
 const { generateTextWithOpenAI, generateTextWithOpenAIAndAudio } = require('./providers/openai');
-const { generateTextWithYandex } = require('./providers/yandex');
+const { generateTextWithYandex, generateTextWithYandexAndAudio } = require('./providers/yandex');
 
 const ALLOWED_ORIGIN = "*";
 
@@ -100,7 +100,13 @@ exports.handler = async (event) => {
                 console.log('[Provider] gemini (audio pipeline)');
                 text = await generateTextWithGeminiAndAudio(geminiApiKey, { prompt, system }, audioBase64);
             } else if (provider === 'yandex') {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Аудио-пайплайн для Yandex GPT не реализован.' }) };
+                if (!yandexApiKey || !yandexFolderId) {
+                    return { statusCode: 500, headers, body: JSON.stringify({ error: 'YANDEX_API_KEY/YANDEX_FOLDER_ID не заданы.' }) };
+                }
+                console.log('[Provider] yandex (audio pipeline)');
+                const res = await generateTextWithYandexAndAudio(yandexApiKey, yandexFolderId, { prompt, system }, audioBase64, { format: 'oggopus', lang: 'ru-RU', sampleRateHertz: 48000 });
+                text = typeof res === 'string' ? res : res.message;
+                transcript = typeof res === 'object' ? res.transcript : undefined;
             }
             return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider, transcript }) };
 
