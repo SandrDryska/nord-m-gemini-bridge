@@ -3,6 +3,7 @@
 const busboy = require('busboy');
 const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./providers/gemini');
 const { generateTextWithOpenAI, generateTextWithOpenAIAndAudio } = require('./providers/openai');
+const { generateTextWithYandex } = require('./providers/yandex');
 
 const ALLOWED_ORIGIN = "*";
 
@@ -64,6 +65,8 @@ exports.handler = async (event) => {
     const provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const openaiApiKey = process.env.OPENAI_API_KEY;
+    const yandexApiKey = process.env.YANDEX_API_KEY;
+    const yandexFolderId = process.env.YANDEX_FOLDER_ID;
 
     try {
         let requestParts = [];
@@ -90,12 +93,14 @@ exports.handler = async (event) => {
                 const res = await generateTextWithOpenAIAndAudio(openaiApiKey, { prompt, system }, audioBase64);
                 text = typeof res === 'string' ? res : res.message;
                 transcript = typeof res === 'object' ? res.transcript : undefined;
-            } else {
+            } else if (provider === 'gemini') {
                 if (!geminiApiKey) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
                 }
                 console.log('[Provider] gemini (audio pipeline)');
                 text = await generateTextWithGeminiAndAudio(geminiApiKey, { prompt, system }, audioBase64);
+            } else if (provider === 'yandex') {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Аудио-пайплайн для Yandex GPT не реализован.' }) };
             }
             return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider, transcript }) };
 
@@ -118,12 +123,18 @@ exports.handler = async (event) => {
             }
             console.log('[Provider] openai (text pipeline)');
             text = await generateTextWithOpenAI(openaiApiKey, { prompt: requestParts[0], system });
-        } else {
+        } else if (provider === 'gemini') {
             if (!geminiApiKey) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
             }
             console.log('[Provider] gemini (text pipeline)');
             text = await generateTextWithGemini(geminiApiKey, { prompt: requestParts[0], system });
+        } else if (provider === 'yandex') {
+            if (!yandexApiKey || !yandexFolderId) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'YANDEX_API_KEY/YANDEX_FOLDER_ID не заданы.' }) };
+            }
+            console.log('[Provider] yandex (text pipeline)');
+            text = await generateTextWithYandex(yandexApiKey, yandexFolderId, { prompt: requestParts[0], system });
         }
 
         return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };
