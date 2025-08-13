@@ -1,5 +1,5 @@
 // Измените модель здесь: например 'qwen', 'yandexgpt', 'yandexgpt-lite'
-const DEFAULT_MODEL_NAME = 'yandexgpt';
+const DEFAULT_MODEL_NAME = 'yandexgpt-lite';
 
 async function generateTextWithYandex(apiKey, folderId, input, options) {
 	const { prompt, system } = normalizeInput(input);
