@@ -108,6 +108,10 @@ exports.handler = async (event) => {
             const body = JSON.parse(event.body);
             const prompt = body.prompt;
             var system = body.system;
+            var modelName = body.modelName; // для Яндекс (например, yandexgpt, qwen, jne)
+            var modelUri = body.modelUri;   // полный URI, если хотим указать явный
+            var temperature = body.temperature;
+            var maxTokens = body.maxTokens;
             if (!prompt) throw new Error("Промпт не предоставлен.");
             requestParts.push(prompt);
 
@@ -134,7 +138,12 @@ exports.handler = async (event) => {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'YANDEX_API_KEY/YANDEX_FOLDER_ID не заданы.' }) };
             }
             console.log('[Provider] yandex (text pipeline)');
-            text = await generateTextWithYandex(yandexApiKey, yandexFolderId, { prompt: requestParts[0], system });
+            text = await generateTextWithYandex(
+                yandexApiKey,
+                yandexFolderId,
+                { prompt: requestParts[0], system },
+                { modelName, modelUri, temperature, maxTokens }
+            );
         }
 
         return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };

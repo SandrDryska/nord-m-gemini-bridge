@@ -1,6 +1,9 @@
-async function generateTextWithYandex(apiKey, folderId, input) {
+// Измените модель здесь: например 'qwen', 'yandexgpt', 'yandexgpt-lite'
+const DEFAULT_MODEL_NAME = 'yandexgpt';
+
+async function generateTextWithYandex(apiKey, folderId, input, options) {
 	const { prompt, system } = normalizeInput(input);
-	const modelUri = `gpt://${folderId}/yandexgpt/latest`;
+	const resolved = resolveYandexOptions(folderId, options);
 
 	const messages = [];
 	if (system && system.trim().length > 0) {
@@ -9,11 +12,11 @@ async function generateTextWithYandex(apiKey, folderId, input) {
 	messages.push({ role: 'user', text: prompt });
 
 	const body = {
-		modelUri,
+		modelUri: resolved.modelUri,
 		completionOptions: {
 			stream: false,
-			temperature: 0.6,
-			maxTokens: 2000,
+			temperature: resolved.temperature,
+			maxTokens: resolved.maxTokens,
 		},
 		messages,
 	};
@@ -34,6 +37,37 @@ async function generateTextWithYandex(apiKey, folderId, input) {
 	const data = await response.json();
 	const text = data?.result?.alternatives?.[0]?.message?.text ?? '';
 	return text;
+}
+
+function resolveYandexOptions(folderId, options) {
+	const defaults = {
+		modelUri: `gpt://${folderId}/${DEFAULT_MODEL_NAME}/latest`,
+		temperature: 0.6,
+		maxTokens: 2000,
+	};
+
+	const modelUri = options?.modelUri
+		? String(options.modelUri)
+		: (options?.modelName
+			? `gpt://${folderId}/${String(options.modelName)}/latest`
+			: defaults.modelUri);
+
+	const temperature = isFiniteNumber(options?.temperature)
+		? Number(options.temperature)
+		: defaults.temperature;
+
+	const maxTokens = isFiniteInteger(options?.maxTokens)
+		? Number(options.maxTokens)
+		: defaults.maxTokens;
+	return { modelUri, temperature, maxTokens };
+}
+
+function isFiniteNumber(v) {
+	return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isFiniteInteger(v) {
+	return (typeof v === 'number' || typeof v === 'string') && Number.isInteger(Number(v));
 }
 
 async function safeReadText(res) {
