@@ -12,8 +12,8 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@netlify/blobs": "^8.2.0",
-    "openai": "^4.53.2",
     "busboy": "^1.6.0",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "openai": "^4.53.2"
   }
 }
