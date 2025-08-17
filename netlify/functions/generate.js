@@ -24,11 +24,15 @@ try {
 function getBlobsStore() {
     try {
         if (NETLIFY_SITE_ID && NETLIFY_BLOBS_TOKEN) {
-            return getStore('ai-sessions', { siteID: NETLIFY_SITE_ID, token: NETLIFY_BLOBS_TOKEN });
+            console.log('[Blobs] Using manual config with siteID length:', NETLIFY_SITE_ID.length, 'token length:', NETLIFY_BLOBS_TOKEN.length);
+            const config = { siteID: NETLIFY_SITE_ID, token: NETLIFY_BLOBS_TOKEN };
+            return getStore('ai-sessions', config);
         }
         // Авто-конфигурация в среде Netlify (prod/preview/dev через netlify dev)
+        console.log('[Blobs] Using auto config');
         return getStore('ai-sessions');
     } catch (e) {
+        console.error('[Blobs] Store creation failed:', e.message);
         // Пробрасываем дальше, чтобы верхний уровень корректно залогировал
         throw e;
     }
