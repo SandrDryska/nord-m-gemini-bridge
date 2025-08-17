@@ -1,13 +1,24 @@
 async function generateTextWithOpenAI(apiKey, input) {
-  const { prompt, system } = normalizeInput(input);
   const primaryModel = "gpt-5-nano-2025-08-07";
   const fallbackModel = "gpt-4o-mini";
   let modelUsed = primaryModel;
 
-  const messages = system ? [
-    { role: 'system', content: system },
-    { role: 'user', content: prompt },
-  ] : [ { role: 'user', content: prompt } ];
+  let messages;
+  if (Array.isArray(input)) {
+    // Новый формат: массив сообщений
+    messages = input.map(msg => ({
+      role: msg.role,
+      content: msg.text
+    }));
+  } else {
+    // Обратная совместимость: старый формат
+    const { prompt, system } = normalizeInput(input);
+    messages = system ? [
+      { role: 'system', content: system },
+      { role: 'user', content: prompt },
+    ] : [ { role: 'user', content: prompt } ];
+  }
+  
   const primaryBody = { model: primaryModel, messages, temperature: 1 };
   let response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -39,7 +50,6 @@ async function generateTextWithOpenAI(apiKey, input) {
 }
 
 async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
-  const { prompt, system } = normalizeInput(input);
   // 1) Транскрипция
   const primaryTranscribe = "gpt-4o-mini-transcribe";
   const fallbackTranscribe = "whisper-1";
@@ -89,6 +99,26 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
   const primaryModel = "gpt-5-nano-2025-08-07";
   const fallbackModel = "gpt-4o-mini";
   let textModelUsed = primaryModel;
+  
+  let messages;
+  if (Array.isArray(input)) {
+    // Новый формат: массив сообщений с добавлением транскрипции к последнему user сообщению
+    messages = input.map(msg => ({
+      role: msg.role,
+      content: msg.text
+    }));
+    // Добавляем транскрипцию к последнему user сообщению
+    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      messages[messages.length - 1].content += `\n\nТранскрипция аудио:\n${transcriptText}`;
+    }
+  } else {
+    // Обратная совместимость: старый формат
+    const { prompt, system } = normalizeInput(input);
+    messages = system
+      ? [ { role: 'system', content: system }, { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ]
+      : [ { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ];
+  }
+  
   const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -97,9 +127,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
     },
     body: JSON.stringify({
       model: primaryModel,
-      messages: system
-        ? [ { role: 'system', content: system }, { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ]
-        : [ { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ],
+      messages,
       temperature: 1,
     }),
   });
@@ -113,9 +141,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: fallbackModel,
-        messages: system
-          ? [ { role: 'system', content: system }, { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ]
-          : [ { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ],
+        messages,
         temperature: 1,
       }),
     });

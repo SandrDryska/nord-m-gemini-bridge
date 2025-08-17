@@ -2,14 +2,24 @@
 const DEFAULT_MODEL_NAME = 'yandexgpt-lite';
 
 async function generateTextWithYandex(apiKey, folderId, input, options) {
-	const { prompt, system } = normalizeInput(input);
 	const resolved = resolveYandexOptions(folderId, options);
-
-	const messages = [];
-	if (system && system.trim().length > 0) {
-		messages.push({ role: 'system', text: system });
+	
+	let messages;
+	if (Array.isArray(input)) {
+		// Новый формат: массив сообщений
+		messages = input.map(msg => ({
+			role: msg.role,
+			text: msg.text
+		}));
+	} else {
+		// Обратная совместимость: старый формат
+		const { prompt, system } = normalizeInput(input);
+		messages = [];
+		if (system && system.trim().length > 0) {
+			messages.push({ role: 'system', text: system });
+		}
+		messages.push({ role: 'user', text: prompt });
 	}
-	messages.push({ role: 'user', text: prompt });
 
 	const body = {
 		modelUri: resolved.modelUri,
@@ -90,13 +100,14 @@ async function transcribeWithYandexSTT(apiKey, folderId, audioBuffer, opts = {})
 	const format = opts.format || 'oggopus';
 	const sampleRateHertz = opts.sampleRateHertz || 48000;
 
-	const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${encodeURIComponent(folderId)}&lang=${encodeURIComponent(lang)}&format=${encodeURIComponent(format)}&sampleRateHertz=${encodeURIComponent(String(sampleRateHertz))}`;
+	const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?lang=${encodeURIComponent(lang)}&format=${encodeURIComponent(format)}&sampleRateHertz=${encodeURIComponent(String(sampleRateHertz))}`;
 
 	const response = await fetch(url, {
 		method: 'POST',
 		headers: {
 			Authorization: `Api-Key ${apiKey}`,
 			'Content-Type': 'application/octet-stream',
+			'x-folder-id': folderId,
 		},
 		body: audioBuffer,
 	});
@@ -121,12 +132,29 @@ async function transcribeWithYandexSTT(apiKey, folderId, audioBuffer, opts = {})
 async function generateTextWithYandexAndAudio(apiKey, folderId, input, audioBase64, sttOpts) {
 	const audioBuffer = Buffer.from(audioBase64, 'base64');
 	const transcript = await transcribeWithYandexSTT(apiKey, folderId, audioBuffer, sttOpts);
-	const { prompt, system } = normalizeInput(input);
-	const mergedPrompt = system
-		? `${prompt}\n\nТранскрипция аудио:\n${transcript}`
-		: `${prompt}\n\nТранскрипция аудио:\n${transcript}`;
+	
+	let messagesWithAudio;
+	if (Array.isArray(input)) {
+		// Новый формат: массив сообщений
+		messagesWithAudio = [...input];
+		// Заменяем последнее user сообщение на версию с транскрипцией
+		if (messagesWithAudio.length > 0 && messagesWithAudio[messagesWithAudio.length - 1].role === 'user') {
+			const lastMessage = messagesWithAudio[messagesWithAudio.length - 1];
+			messagesWithAudio[messagesWithAudio.length - 1] = {
+				...lastMessage,
+				text: `${lastMessage.text}\n\nТранскрипция аудио:\n${transcript}`
+			};
+		}
+	} else {
+		// Обратная совместимость: старый формат
+		const { prompt, system } = normalizeInput(input);
+		const mergedPrompt = system
+			? `${prompt}\n\nТранскрипция аудио:\n${transcript}`
+			: `${prompt}\n\nТранскрипция аудио:\n${transcript}`;
+		messagesWithAudio = { prompt: mergedPrompt, system };
+	}
 
-	const text = await generateTextWithYandex(apiKey, folderId, { prompt: mergedPrompt, system });
+	const text = await generateTextWithYandex(apiKey, folderId, messagesWithAudio);
 	return { message: text, transcript };
 }
 

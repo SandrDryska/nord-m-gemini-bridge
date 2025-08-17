@@ -1,11 +1,87 @@
 // netlify/functions/generate.js
 
 const busboy = require('busboy');
+const { getStore } = require('@netlify/blobs');
 const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./providers/gemini');
 const { generateTextWithOpenAI, generateTextWithOpenAIAndAudio } = require('./providers/openai');
 const { generateTextWithYandex, generateTextWithYandexAndAudio } = require('./providers/yandex');
 
 const ALLOWED_ORIGIN = "*";
+
+// Константы для сессий
+const SESSION_TTL_MINUTES = 60;
+const MAX_MESSAGES_IN_SESSION = 20; // Ограничение для скользящего окна
+
+// Функции для работы с сессиями
+async function getSession(sessionId) {
+    if (!sessionId) return null;
+    try {
+        const store = getStore('ai-sessions');
+        const sessionData = await store.get(sessionId, { type: 'json' });
+        return sessionData;
+    } catch (error) {
+        console.warn('[Session] Ошибка загрузки сессии:', error.message);
+        return null;
+    }
+}
+
+async function saveSession(sessionId, sessionData) {
+    if (!sessionId) return;
+    try {
+        const store = getStore('ai-sessions');
+        await store.set(sessionId, JSON.stringify(sessionData), {
+            metadata: { 
+                ttl: SESSION_TTL_MINUTES * 60 // TTL в секундах
+            }
+        });
+    } catch (error) {
+        console.error('[Session] Ошибка сохранения сессии:', error.message);
+    }
+}
+
+async function deleteSession(sessionId) {
+    if (!sessionId) return;
+    try {
+        const store = getStore('ai-sessions');
+        await store.delete(sessionId);
+    } catch (error) {
+        console.warn('[Session] Ошибка удаления сессии:', error.message);
+    }
+}
+
+function createNewSession(systemPrompt = '') {
+    return {
+        systemPrompt,
+        messages: [],
+        createdAt: Date.now(),
+        lastActivity: Date.now()
+    };
+}
+
+function trimSessionHistory(messages, maxMessages = MAX_MESSAGES_IN_SESSION) {
+    if (messages.length <= maxMessages) return messages;
+    // Оставляем последние maxMessages сообщений
+    return messages.slice(-maxMessages);
+}
+
+function formatMessagesForProvider(systemPrompt, messages, newUserMessage) {
+    const allMessages = [];
+    
+    // Добавляем system prompt если есть
+    if (systemPrompt && systemPrompt.trim()) {
+        allMessages.push({ role: 'system', text: systemPrompt });
+    }
+    
+    // Добавляем историю сообщений
+    allMessages.push(...messages);
+    
+    // Добавляем новое сообщение пользователя
+    if (newUserMessage && newUserMessage.trim()) {
+        allMessages.push({ role: 'user', text: newUserMessage });
+    }
+    
+    return allMessages;
+}
 
 function parseMultipartForm(event) {
     return new Promise((resolve, reject) => {
@@ -76,44 +152,100 @@ exports.handler = async (event) => {
             const parsed = await parseMultipartForm(event);
             const prompt = parsed.fields.prompt;
             const system = parsed.fields.system;
+            const sessionId = parsed.fields.sessionId;
+            const endSession = parsed.fields.endSession === 'true';
+            const resetContext = parsed.fields.resetContext === 'true';
+            const audioFormat = parsed.fields.audioFormat; // 'oggopus' | 'webm' (optional)
             const audioFile = parsed.files.find(f => f.fieldname === 'audio');
             
             if (!audioFile || !prompt) {
                 throw new Error("Неполные данные в multipart-запросе.");
             }
 
+            // Обработка команд управления сессией
+            if (endSession && sessionId) {
+                await deleteSession(sessionId);
+                return { statusCode: 200, headers, body: JSON.stringify({ 
+                    message: 'Сессия завершена', 
+                    sessionId,
+                    provider 
+                }) };
+            }
+
+            // Загружаем или создаём сессию
+            let session = null;
+            if (sessionId) {
+                session = await getSession(sessionId);
+                if (resetContext && session) {
+                    session.messages = [];
+                    session.lastActivity = Date.now();
+                }
+            }
+            if (!session) {
+                session = createNewSession(system || '');
+            }
+
             const audioBase64 = audioFile.content.toString('base64');
             let text;
             let transcript;
+            
+            // Формируем контекст для модели с учётом истории
+            const messagesForProvider = formatMessagesForProvider(session.systemPrompt, session.messages, prompt);
+            
             if (provider === 'openai') {
                 if (!openaiApiKey) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
                 }
-                console.log('[Provider] openai (audio pipeline)');
-                const res = await generateTextWithOpenAIAndAudio(openaiApiKey, { prompt, system }, audioBase64);
+                console.log('[Provider] openai (audio pipeline with session)');
+                const res = await generateTextWithOpenAIAndAudio(openaiApiKey, messagesForProvider, audioBase64);
                 text = typeof res === 'string' ? res : res.message;
                 transcript = typeof res === 'object' ? res.transcript : undefined;
             } else if (provider === 'gemini') {
                 if (!geminiApiKey) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
                 }
-                console.log('[Provider] gemini (audio pipeline)');
-                text = await generateTextWithGeminiAndAudio(geminiApiKey, { prompt, system }, audioBase64);
+                console.log('[Provider] gemini (audio pipeline with session)');
+                text = await generateTextWithGeminiAndAudio(geminiApiKey, messagesForProvider, audioBase64);
             } else if (provider === 'yandex') {
                 if (!yandexApiKey || !yandexFolderId) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'YANDEX_API_KEY/YANDEX_FOLDER_ID не заданы.' }) };
                 }
-                console.log('[Provider] yandex (audio pipeline)');
-                const res = await generateTextWithYandexAndAudio(yandexApiKey, yandexFolderId, { prompt, system }, audioBase64, { format: 'oggopus', lang: 'ru-RU', sampleRateHertz: 48000 });
+                console.log('[Provider] yandex (audio pipeline with session)');
+                const res = await generateTextWithYandexAndAudio(
+                    yandexApiKey,
+                    yandexFolderId,
+                    messagesForProvider,
+                    audioBase64,
+                    { format: audioFormat || 'oggopus', lang: 'ru-RU', sampleRateHertz: 48000 }
+                );
                 text = typeof res === 'string' ? res : res.message;
                 transcript = typeof res === 'object' ? res.transcript : undefined;
             }
-            return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider, transcript }) };
+
+            // Сохраняем сессию с новыми сообщениями
+            if (sessionId) {
+                session.messages.push({ role: 'user', text: transcript || prompt, timestamp: Date.now() });
+                session.messages.push({ role: 'assistant', text: text, timestamp: Date.now() });
+                session.messages = trimSessionHistory(session.messages);
+                session.lastActivity = Date.now();
+                await saveSession(sessionId, session);
+            }
+
+            return { statusCode: 200, headers, body: JSON.stringify({ 
+                generatedText: text, 
+                provider, 
+                transcript,
+                sessionId,
+                turns: session ? Math.floor(session.messages.length / 2) : 0
+            }) };
 
         } else if (contentType && contentType.startsWith('application/json')) {
             const body = JSON.parse(event.body);
             const prompt = body.prompt;
             var system = body.system;
+            var sessionId = body.sessionId;
+            var endSession = body.endSession === true;
+            var resetContext = body.resetContext === true;
             var modelName = body.modelName; // для Яндекс (например, yandexgpt, qwen, jne)
             var modelUri = body.modelUri;   // полный URI, если хотим указать явный
             var temperature = body.temperature;
@@ -125,34 +257,74 @@ exports.handler = async (event) => {
             throw new Error(`Неподдерживаемый или отсутствующий Content-Type: ${contentType}`);
         }
 
+        // Обработка команд управления сессией для текстового пайплайна
+        if (endSession && sessionId) {
+            await deleteSession(sessionId);
+            return { statusCode: 200, headers, body: JSON.stringify({ 
+                message: 'Сессия завершена', 
+                sessionId,
+                provider 
+            }) };
+        }
+
+        // Загружаем или создаём сессию
+        let session = null;
+        if (sessionId) {
+            session = await getSession(sessionId);
+            if (resetContext && session) {
+                session.messages = [];
+                session.lastActivity = Date.now();
+            }
+        }
+        if (!session) {
+            session = createNewSession(system || '');
+        }
+
+        // Формируем контекст для модели с учётом истории
+        const messagesForProvider = formatMessagesForProvider(session.systemPrompt, session.messages, requestParts[0]);
+
         // Текстовый путь
         let text;
         if (provider === 'openai') {
             if (!openaiApiKey) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY не задан.' }) };
             }
-            console.log('[Provider] openai (text pipeline)');
-            text = await generateTextWithOpenAI(openaiApiKey, { prompt: requestParts[0], system });
+            console.log('[Provider] openai (text pipeline with session)');
+            text = await generateTextWithOpenAI(openaiApiKey, messagesForProvider);
         } else if (provider === 'gemini') {
             if (!geminiApiKey) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'GEMINI_API_KEY не задан.' }) };
             }
-            console.log('[Provider] gemini (text pipeline)');
-            text = await generateTextWithGemini(geminiApiKey, { prompt: requestParts[0], system });
+            console.log('[Provider] gemini (text pipeline with session)');
+            text = await generateTextWithGemini(geminiApiKey, messagesForProvider);
         } else if (provider === 'yandex') {
             if (!yandexApiKey || !yandexFolderId) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: 'YANDEX_API_KEY/YANDEX_FOLDER_ID не заданы.' }) };
             }
-            console.log('[Provider] yandex (text pipeline)');
+            console.log('[Provider] yandex (text pipeline with session)');
             text = await generateTextWithYandex(
                 yandexApiKey,
                 yandexFolderId,
-                { prompt: requestParts[0], system },
+                messagesForProvider,
                 { modelName, modelUri, temperature, maxTokens }
             );
         }
 
-        return { statusCode: 200, headers, body: JSON.stringify({ generatedText: text, provider }) };
+        // Сохраняем сессию с новыми сообщениями
+        if (sessionId) {
+            session.messages.push({ role: 'user', text: requestParts[0], timestamp: Date.now() });
+            session.messages.push({ role: 'assistant', text: text, timestamp: Date.now() });
+            session.messages = trimSessionHistory(session.messages);
+            session.lastActivity = Date.now();
+            await saveSession(sessionId, session);
+        }
+
+        return { statusCode: 200, headers, body: JSON.stringify({ 
+            generatedText: text, 
+            provider,
+            sessionId,
+            turns: session ? Math.floor(session.messages.length / 2) : 0
+        }) };
 
     } catch (error) {
         console.error('Ошибка в функции:', error);
