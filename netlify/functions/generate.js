@@ -13,6 +13,14 @@ const ALLOWED_ORIGIN = "*";
 const NETLIFY_SITE_ID = process.env.N_SITE_ID || process.env.NETLIFY_SITE_ID;
 const NETLIFY_BLOBS_TOKEN = process.env.N_BLOB_TOKEN || process.env.NETLIFY_BLOBS_TOKEN;
 
+// Диагностика наличия переменных окружения (без утечек значений)
+try {
+    console.log('[Blobs] Manual env detected:', {
+        hasSiteId: Boolean(NETLIFY_SITE_ID),
+        hasToken: Boolean(NETLIFY_BLOBS_TOKEN)
+    });
+} catch (_) {}
+
 function getBlobsStore() {
     try {
         if (NETLIFY_SITE_ID && NETLIFY_BLOBS_TOKEN) {
