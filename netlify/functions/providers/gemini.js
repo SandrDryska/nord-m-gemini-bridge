@@ -68,15 +68,20 @@ async function generateTextWithGeminiAndAudio(apiKey, input, audioBase64) {
     // Обратная совместимость: старый формат
     const { prompt, system } = normalizeInput(input);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", ...(system ? { systemInstruction: system } : {}) });
-    const parts = [
-      prompt,
-      {
-        inlineData: {
-          data: audioBase64,
-          mimeType: "audio/webm",
-        },
+    const parts = [];
+    
+    // Добавляем текстовый промпт только если он не пустой
+    if (prompt && prompt.trim()) {
+      parts.push(prompt);
+    }
+    
+    // Всегда добавляем аудио
+    parts.push({
+      inlineData: {
+        data: audioBase64,
+        mimeType: "audio/webm",
       },
-    ];
+    });
 
     const result = await model.generateContent(parts);
     const response = await result.response;

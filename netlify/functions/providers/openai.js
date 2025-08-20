@@ -114,9 +114,21 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
   } else {
     // Обратная совместимость: старый формат
     const { prompt, system } = normalizeInput(input);
-    messages = system
-      ? [ { role: 'system', content: system }, { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ]
-      : [ { role: 'user', content: `${prompt}\n\nТранскрипция аудио:\n${transcriptText}` } ];
+    messages = [];
+    
+    if (system) {
+      messages.push({ role: 'system', content: system });
+    }
+    
+    // Формируем контент пользователя
+    let userContent = '';
+    if (prompt && prompt.trim()) {
+      userContent = `${prompt}\n\nТранскрипция аудио:\n${transcriptText}`;
+    } else {
+      userContent = `Транскрипция аудио:\n${transcriptText}`;
+    }
+    
+    messages.push({ role: 'user', content: userContent });
   }
   
   const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {

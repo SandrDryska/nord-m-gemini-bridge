@@ -188,8 +188,8 @@ exports.handler = async (event) => {
             const audioFormat = parsed.fields.audioFormat; // 'oggopus' | 'webm' (optional)
             const audioFile = parsed.files.find(f => f.fieldname === 'audio');
             
-            if (!audioFile || !prompt) {
-                throw new Error("Неполные данные в multipart-запросе.");
+            if (!audioFile) {
+                throw new Error("Аудиофайл не предоставлен.");
             }
 
             // Обработка команд управления сессией

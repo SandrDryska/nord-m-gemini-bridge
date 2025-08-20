@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Recorder Bridge</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="recorder-container">
+        <div class="controls">
+            <button id="btnRecord" class="btn icon" title="Записать/Стоп" aria-label="Записать или остановить">
+                <svg viewBox="0 0 24 24" class="icon-svg" aria-hidden="true">
+                    <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zM11 19h2v3h-2z"/>
+                </svg>
+            </button>
+            <button id="btnPlay" class="btn icon" title="Прослушать" aria-label="Прослушать" disabled>
+                <svg viewBox="0 0 24 24" class="icon-svg" aria-hidden="true">
+                    <path d="M8 5v14l11-7L8 5z"/>
+                </svg>
+            </button>
+            <button id="btnSend" class="btn icon" style="display:none" title="Отправить" aria-label="Отправить" disabled>
+                <svg viewBox="0 0 24 24" class="icon-svg" aria-hidden="true">
+                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+                </svg>
+            </button>
+        </div>
+        <audio id="preview" controls style="display:none"></audio>
+        <div class="status-box"><p id="statusText">Готов к записи. Нажмите «Записать/Стоп».</p></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

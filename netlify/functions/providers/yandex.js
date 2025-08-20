@@ -148,9 +148,14 @@ async function generateTextWithYandexAndAudio(apiKey, folderId, input, audioBase
 	} else {
 		// Обратная совместимость: старый формат
 		const { prompt, system } = normalizeInput(input);
-		const mergedPrompt = system
-			? `${prompt}\n\nТранскрипция аудио:\n${transcript}`
-			: `${prompt}\n\nТранскрипция аудио:\n${transcript}`;
+		let mergedPrompt;
+		if (prompt && prompt.trim()) {
+			mergedPrompt = system
+				? `${prompt}\n\nТранскрипция аудио:\n${transcript}`
+				: `${prompt}\n\nТранскрипция аудио:\n${transcript}`;
+		} else {
+			mergedPrompt = `Транскрипция аудио:\n${transcript}`;
+		}
 		messagesWithAudio = { prompt: mergedPrompt, system };
 	}
 
