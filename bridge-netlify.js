@@ -1,4 +1,4 @@
-// script.js
+// bridge-netlify.js
 
 const PARENT_WINDOW_ORIGIN = '*'; // В продакшене замените на origin вашего LMS
 
