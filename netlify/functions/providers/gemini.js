@@ -51,8 +51,12 @@ async function generateTextWithGeminiAndAudio(apiKey, input, audioBase64) {
       .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
       .join('\n\n');
     
+    // Для Gemini: добавляем требование транскрипции в JSON ответ
+    const enhancedHistory = conversationHistory + 
+      "\n\nВАЖНО: Если в JSON ответе есть поле 'transcript' - заполни его точной транскрипцией аудио пользователя.";
+    
     const parts = [
-      conversationHistory,
+      enhancedHistory,
       {
         inlineData: {
           data: audioBase64,
@@ -72,7 +76,10 @@ async function generateTextWithGeminiAndAudio(apiKey, input, audioBase64) {
     
     // Добавляем текстовый промпт только если он не пустой
     if (prompt && prompt.trim()) {
-      parts.push(prompt);
+      // Для Gemini: добавляем требование транскрипции в JSON ответ
+      const enhancedPrompt = prompt + 
+        "\n\nВАЖНО: Если в JSON ответе есть поле 'transcript' - заполни его точной транскрипцией аудио пользователя.";
+      parts.push(enhancedPrompt);
     }
     
     // Всегда добавляем аудио
