@@ -164,6 +164,16 @@ exports.handler = async (event) => {
         'Content-Type': 'application/json',
     };
 
+    // Provider detection endpoint
+    if (event.httpMethod === 'GET' && (event.path || '').includes('/provider')) {
+        const provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ provider })
+        };
+    }
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
