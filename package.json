@@ -1,0 +1,19 @@
+{
+  "name": "gemini-storyline-bridge",
+  "version": "1.0.0",
+  "main": "bridge-netlify.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@netlify/blobs": "^8.2.0",
+    "busboy": "^1.6.0",
+    "node-fetch": "^2.7.0",
+    "openai": "^4.53.2"
+  }
+}

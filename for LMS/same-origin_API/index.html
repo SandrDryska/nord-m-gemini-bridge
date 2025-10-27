@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audio Recorder Bridge</title>
+  <style>
+    body { margin: 16px; font-family: system-ui, Arial, sans-serif; display: block; background-color: transparent; text-align: left; }
+    .recorder-container { display: grid; grid-template-columns: auto max-content; column-gap: 20px; row-gap: 16px; align-items: center; }
+    .controls { display: flex; gap: 16px; justify-content: flex-start; }
+    .btn { padding: 12px 16px; border: 1px solid #007bff; background: #f0f8ff; cursor: pointer; border-radius: 12px; }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .btn.icon { width: 96px; height: 96px; display: inline-flex; align-items: center; justify-content: center; }
+    .btn.icon .icon-svg { width: 48px; height: 48px; fill: #007bff; }
+    .btn.icon:hover:not(:disabled) { background: #e6f2ff; }
+    .recording.btn.icon .icon-svg { fill: #dc3545; }
+    #statusText { font-size: 28px; color: #223; margin: 0; }
+    .status-box { background: rgba(255,255,255,0.9); border: 1px solid #ccd; border-radius: 12px; padding: 16px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); max-width: 640px; }
+    .status-box { grid-column: 1 / -1; }
+    #preview { align-self: center; }
+  </style>
+</head>
+<body>
+  <div class="recorder-container">
+    <div class="controls">
+      <button id="btnRecord" class="btn icon" title="Записать/Стоп" aria-label="Записать или остановить">
+        <svg viewBox="0 0 24 24" class="icon-svg" aria-hidden="true">
+          <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zM11 19h2v3h-2z"/>
+        </svg>
+      </button>
+      <button id="btnPlay" class="btn icon" title="Прослушать" aria-label="Прослушать" disabled>
+        <svg viewBox="0 0 24 24" class="icon-svg" aria-hidden="true">
+          <path d="M8 5v14l11-7L8 5z"/>
+        </svg>
+      </button>
+      <button id="btnSend" class="btn icon" style="display:none" title="Отправить" aria-label="Отправить" disabled>
+        <svg viewBox="0 0 24 24" class="icon-svg" aria-hidden="true">
+          <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+        </svg>
+      </button>
+    </div>
+    <audio id="preview" controls style="display:none"></audio>
+    <div class="status-box"><p id="statusText">Готов к записи. Нажмите «Записать/Стоп».</p></div>
+  </div>
+
+  <script src="recorder-bridge.js"></script>
+  <script>
+    (function(){
+      const btnRecord = document.getElementById('btnRecord');
+      const btnPlay = document.getElementById('btnPlay');
+      const btnSend = document.getElementById('btnSend');
+      const statusText = document.getElementById('statusText');
+      const preview = document.getElementById('preview');
+      let isRecording = false;
+
+      // Init API (uses default Netlify endpoint) and bind audio element
+      try { window.WebRecorder && window.WebRecorder.init && window.WebRecorder.init(); } catch(_) {}
+      try { window.WebRecorder && window.WebRecorder.setAudioElement && window.WebRecorder.setAudioElement(preview); } catch(_) {}
+      // Note: Do NOT force-enable autosend here. Respect Storyline SR_AutoSend or explicit API calls.
+      // If you need autosend for local testing, uncomment the next line.
+      // try { window.WebRecorder && window.WebRecorder.setAutosend && window.WebRecorder.setAutosend(true); } catch(_) {}
+
+      btnRecord.onclick = async () => {
+        if (!isRecording) {
+          try {
+            await window.WebRecorder.startRecording();
+            isRecording = true;
+            btnRecord.classList.add('recording');
+            statusText.textContent = 'Идет запись... Нажмите, чтобы остановить.';
+          } catch (e) {
+            statusText.textContent = 'Ошибка доступа к микрофону: ' + (e && e.message || e);
+          }
+        } else {
+          try {
+            window.WebRecorder.stopRecording();
+            isRecording = false;
+            btnRecord.classList.remove('recording');
+            statusText.textContent = 'Запись завершена. Можно прослушать или отправить.';
+            btnPlay.disabled = false;
+            btnSend.disabled = false;
+            preview.style.display = 'block';
+          } catch (_) {}
+        }
+      };
+
+      btnPlay.onclick = () => { try { window.WebRecorder.play(); } catch(_) {} };
+      btnSend.onclick = async () => {
+        statusText.textContent = 'Отправка...';
+        try { await window.WebRecorder.send(); statusText.textContent = 'Отправлено успешно.'; }
+        catch(e){ statusText.textContent = 'Ошибка отправки: ' + (e && e.message || e); }
+      };
+
+      // Reflect API status messages
+      window.addEventListener('message', (e) => {
+        const d = e.data || {}; if(!d.type) return;
+        if (d.type === 'SR_status') {
+          statusText.textContent = d.payload || '';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

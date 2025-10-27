@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRecorder Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+    button { margin: 5px; padding: 8px 12px; }
+    .log { background: #f5f5f5; padding: 10px; margin: 10px 0; max-height: 200px; overflow-y: auto; }
+    .error { color: red; }
+    .success { color: green; }
+  </style>
+</head>
+<body>
+  <h1>WebRecorder API Test</h1>
+  
+  <div class="test-section">
+    <h3>1. Инициализация</h3>
+    <button onclick="testInit()">Инициализировать API</button>
+    <button onclick="testDebug()">Включить отладку</button>
+  </div>
+
+  <div class="test-section">
+    <h3>2. Текстовая отправка</h3>
+    <input type="text" id="testPrompt" value="Привет! Это тест." style="width: 300px;">
+    <button onclick="testTextSend()">Отправить текст</button>
+  </div>
+
+  <div class="test-section">
+    <h3>3. Голосовая запись</h3>
+    <button onclick="testStartRecord()">Начать запись</button>
+    <button onclick="testStopRecord()">Остановить запись</button>
+    <button onclick="testPlay()">Прослушать</button>
+    <button onclick="testSendAudio()">Отправить аудио</button>
+  </div>
+
+  <div class="test-section">
+    <h3>4. Автоотправка</h3>
+    <button onclick="testAutosend(true)">Включить автоотправку</button>
+    <button onclick="testAutosend(false)">Выключить автоотправку</button>
+    <input type="text" id="autoPrompt" placeholder="Введите текст для автоотправки" style="width: 300px;">
+    <button onclick="testAutoPromptChange()">Изменить промпт</button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <script src="recorder-bridge.js"></script>
+  <script>
+    function log(message, isError = false) {
+      const logEl = document.getElementById('log');
+      const div = document.createElement('div');
+      div.className = isError ? 'error' : 'success';
+      div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(message);
+    }
+
+    function testInit() {
+      try {
+        if (!window.WebRecorder) {
+          log('WebRecorder не найден!', true);
+          return;
+        }
+        window.WebRecorder.init({ 
+          autosync: false, // отключаем синхронизацию со Storyline для теста
+          mode: 'mixed',
+          endpoint: 'https://nord-m-gemini.netlify.app/.netlify/functions/generate'
+        });
+        log('WebRecorder инициализирован успешно');
+      } catch (e) {
+        log('Ошибка инициализации: ' + e.message, true);
+      }
+    }
+
+    function testDebug() {
+      try {
+        window.WebRecorder.debug(true);
+        log('Отладка включена');
+      } catch (e) {
+        log('Ошибка включения отладки: ' + e.message, true);
+      }
+    }
+
+    function testTextSend() {
+      try {
+        const prompt = document.getElementById('testPrompt').value;
+        if (!prompt.trim()) {
+          log('Введите текст для отправки', true);
+          return;
+        }
+        
+        window.WebRecorder.setPrompt(prompt);
+        window.WebRecorder.setMode('text');
+        
+        log('Отправляем текст: ' + prompt);
+        window.WebRecorder.send()
+          .then(result => {
+            log('Текст отправлен успешно: ' + JSON.stringify(result));
+          })
+          .catch(error => {
+            log('Ошибка отправки текста: ' + error.message, true);
+          });
+      } catch (e) {
+        log('Ошибка при отправке текста: ' + e.message, true);
+      }
+    }
+
+    function testStartRecord() {
+      try {
+        log('Начинаем запись...');
+        window.WebRecorder.startRecording()
+          .then(() => log('Запись началась'))
+          .catch(error => log('Ошибка начала записи: ' + error.message, true));
+      } catch (e) {
+        log('Ошибка запуска записи: ' + e.message, true);
+      }
+    }
+
+    function testStopRecord() {
+      try {
+        window.WebRecorder.stopRecording();
+        log('Запись остановлена');
+      } catch (e) {
+        log('Ошибка остановки записи: ' + e.message, true);
+      }
+    }
+
+    function testPlay() {
+      try {
+        window.WebRecorder.play();
+        log('Воспроизведение началось');
+      } catch (e) {
+        log('Ошибка воспроизведения: ' + e.message, true);
+      }
+    }
+
+    function testSendAudio() {
+      try {
+        window.WebRecorder.setMode('voice');
+        log('Отправляем аудио...');
+        window.WebRecorder.send()
+          .then(result => {
+            log('Аудио отправлено успешно: ' + JSON.stringify(result));
+          })
+          .catch(error => {
+            log('Ошибка отправки аудио: ' + error.message, true);
+          });
+      } catch (e) {
+        log('Ошибка при отправке аудио: ' + e.message, true);
+      }
+    }
+
+    function testAutosend(enable) {
+      try {
+        window.WebRecorder.setAutosend(enable);
+        log('Автоотправка ' + (enable ? 'включена' : 'выключена'));
+      } catch (e) {
+        log('Ошибка настройки автоотправки: ' + e.message, true);
+      }
+    }
+
+    function testAutoPromptChange() {
+      try {
+        const prompt = document.getElementById('autoPrompt').value;
+        if (!prompt.trim()) {
+          log('Введите текст для автоотправки', true);
+          return;
+        }
+        
+        window.WebRecorder.setPrompt(prompt);
+        log('Промпт изменён на: ' + prompt + ' (автоотправка должна сработать через 300мс)');
+      } catch (e) {
+        log('Ошибка изменения промпта: ' + e.message, true);
+      }
+    }
+
+    // Автоинициализация при загрузке
+    window.addEventListener('load', () => {
+      log('Страница загружена, проверяем WebRecorder...');
+      if (window.WebRecorder) {
+        log('WebRecorder доступен');
+        testInit();
+      } else {
+        log('WebRecorder не найден!', true);
+      }
+    });
+
+    // Перехватываем сообщения от API
+    window.addEventListener('message', (e) => {
+      const data = e.data || {};
+      if (data.type && data.type.startsWith('SR_')) {
+        log('Сообщение от API: ' + data.type + ' = ' + JSON.stringify(data.payload));
+      }
+    });
+  </script>
+</body>
+</html>
