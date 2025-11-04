@@ -1,25 +1,28 @@
 async function generateTextWithMistral(apiKey, input) {
   const primaryModel = "mistral-large-latest";
-  const fallbackModel = "mistral-medium-latest";
+  const fallbackModel = "mistral-small-latest"; // более надёжная доступная модель
   let modelUsed = primaryModel;
 
+  // Готовим сообщения и system-промпт
   let messages;
+  let systemPrompt = "";
   if (Array.isArray(input)) {
-    // Новый формат: массив сообщений
-    messages = input.map(msg => ({
-      role: msg.role === 'system' ? 'system' : msg.role === 'assistant' ? 'assistant' : 'user',
-      content: msg.text
-    }));
+    const systemMsg = input.find(m => m.role === 'system');
+    systemPrompt = systemMsg ? (systemMsg.text || "") : "";
+    messages = input
+      .filter(m => m.role !== 'system')
+      .map(msg => ({
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: msg.text
+      }));
   } else {
     // Обратная совместимость: старый формат
     const { prompt, system } = normalizeInput(input);
-    messages = system ? [
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ] : [ { role: 'user', content: prompt } ];
+    systemPrompt = system || "";
+    messages = [ { role: 'user', content: prompt } ];
   }
   
-  const primaryBody = { model: primaryModel, messages, temperature: 1 };
+  const primaryBody = { model: primaryModel, messages, temperature: 1, max_tokens: 1024, ...(systemPrompt ? { system_prompt: systemPrompt } : {}) };
   let response = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -32,7 +35,7 @@ async function generateTextWithMistral(apiKey, input) {
     const errText = await safeReadText(response);
     console.warn(`[Mistral] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Details: ${errText}`);
     modelUsed = fallbackModel;
-    const fallbackBody = { model: fallbackModel, messages, temperature: 1 };
+    const fallbackBody = { model: fallbackModel, messages, temperature: 1, max_tokens: 1024, ...(systemPrompt ? { system_prompt: systemPrompt } : {}) };
     response = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
