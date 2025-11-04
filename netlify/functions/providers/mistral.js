@@ -1,5 +1,5 @@
 async function generateTextWithMistral(apiKey, input) {
-  const primaryModel = "mistral-large-latest";
+  const primaryModel = "magistral-medium-2509";
   const fallbackModel = "mistral-small-latest"; // более надёжная доступная модель
   let modelUsed = primaryModel;
 
