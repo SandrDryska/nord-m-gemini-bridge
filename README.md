@@ -46,7 +46,7 @@ for LMS/same-origin_API/index.html
 - `SR_Prompt` - вопрос/ввод пользователя
 - `SR_System` - инструкция для ИИ (роль, контекст)
 - `SR_SessionId` - ID сессии (для сохранения истории)
-- `SL_Response` - ответ ИИ
+- `SR_Response` - ответ ИИ
 
 ### 3. Используйте API в триггерах
 
@@ -122,6 +122,32 @@ Content-Type: `application/json` или `multipart/form-data`
 - `for LMS/SESSION_GUIDE.md` - подробное руководство WebRecorder
 - `for LMS/same-origin_API/USAGE_SCENARIOS_RU.md` - примеры сценариев
 - `for LMS/same-origin_API/test.html` - тестирование функций
+
+## Переменные Storyline
+
+### Обязательные
+
+- `SR_Prompt` (Text) — текст запроса пользователя
+
+### Опциональные (входные/настройки)
+
+- `SR_System` (Text) — системный промпт (роль ассистента)
+- `SR_SessionId` (Text) — ID сессии для истории диалога
+- `SR_Mode` (Text) — `text` | `voice` | `mixed` (по умолчанию `mixed`)
+- `SR_AutoSend` (True/False) — автосенд при изменении `SR_Prompt`
+- `SR_AudioFormat` (Text) — `webm` | `oggopus` (по умолчанию `webm`)
+- `SR_FunctionUrl` (Text) — явный URL функции (для SCORM Cloud/нестандартного хостинга)
+- `SR_Debug` (True/False) — подробные логи в консоли
+- `SR_ResetContext` (True/False) — очистка истории перед следующей отправкой
+- `SR_EndSession` (True/False) — завершить сессию при ближайшей отправке
+- `SR_Provider` (Text) — справочно; фактический провайдер задаётся `AI_PROVIDER` на бэкенде
+- Параметры моделей (используются для Yandex): `SR_ModelName`, `SR_ModelUri`, `SR_Temperature`, `SR_MaxTokens`
+
+### Опциональные (выходные — создайте в Storyline, если хотите получать данные)
+
+- `SR_Response` (Text) — текст ответа модели
+- `SR_Transcript` (Text) — расшифровка голосового ввода (если доступно)
+- `SR_Status` (Text) — статус/сервисные сообщения
 
 ## Отладка
 

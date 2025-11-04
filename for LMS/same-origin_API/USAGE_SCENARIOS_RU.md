@@ -10,9 +10,9 @@
 
 - Добавьте на слайд Web Object, указывающий на `same-origin_API/index.html`.
 - Создайте при необходимости переменные Storyline для приёма результатов (опционально):
-  - `SL_Response` (Text) — для текстового ответа модели
-  - `SL_Transcript` (Text) — для текста распознавания аудио (если провайдер возвращает транскрипт)
-  - `SL_Status` (Text) — для статуса/отладки
+  - `SR_Response` (Text) — для текстового ответа модели
+  - `SR_Transcript` (Text) — для текста распознавания аудио (если провайдер возвращает транскрипт)
+  - `SR_Status` (Text) — для статуса/отладки
 - На событие «When timeline starts» добавьте триггер «Execute JavaScript» и вставьте:
 
 ```javascript
@@ -34,9 +34,9 @@
     var d = e.data || {}; if (!d.type) return;
     var p = window.GetPlayer && window.GetPlayer();
     if (!p || !p.SetVar) return;
-    if (d.type === 'SR_response')      p.SetVar('SL_Response', String(d.payload && d.payload.message || ''));
-    if (d.type === 'SR_transcription') p.SetVar('SL_Transcript', String(d.payload || ''));
-    if (d.type === 'SR_status')        p.SetVar('SL_Status', String(d.payload || ''));
+    if (d.type === 'SR_response')      p.SetVar('SR_Response', String(d.payload && d.payload.message || ''));
+    if (d.type === 'SR_transcription') p.SetVar('SR_Transcript', String(d.payload || ''));
+    if (d.type === 'SR_status')        p.SetVar('SR_Status', String(d.payload || ''));
   });
 })();
 ```
@@ -84,7 +84,7 @@
 ```
 
 Результат:
-- Ответ появится в консоли и в переменной `SL_Response` (если создали и подключили обработчик событий).
+- Ответ появится в консоли и в переменной `SR_Response` (если создали и подключили обработчик событий).
 
 — — —
 
