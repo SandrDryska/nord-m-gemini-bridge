@@ -7,6 +7,9 @@ async function generateTextWithMistral(apiKey, input) {
   let messages;
   let systemPrompt = "";
   if (Array.isArray(input)) {
+    // Логируем входящие данные для отладки
+    console.log('[Mistral] Входящие сообщения (первые 3):', JSON.stringify(input.slice(0, 3), null, 2));
+    
     const systemMsg = input.find(m => m.role === 'system');
     systemPrompt = systemMsg ? (systemMsg.text || "") : "";
     // Фильтруем и валидируем сообщения
@@ -26,6 +29,9 @@ async function generateTextWithMistral(apiKey, input) {
           content: textStr.trim()
         };
       });
+    
+    // Логируем преобразованные сообщения
+    console.log('[Mistral] Преобразованные сообщения для API:', JSON.stringify(messages.slice(-2), null, 2));
     
     // Убеждаемся, что последнее сообщение от пользователя
     if (messages.length > 0 && messages[messages.length - 1].role !== 'user') {
@@ -74,11 +80,30 @@ async function generateTextWithMistral(apiKey, input) {
   }
   
   const data = await response.json();
-  const message = data.choices?.[0]?.message?.content ?? "";
-  if (!message) {
-    console.warn('[Mistral] Пустой ответ от API:', JSON.stringify(data));
+  
+  // Логируем структуру ответа для отладки
+  console.log('[Mistral] Структура ответа API:', JSON.stringify(data, null, 2).substring(0, 500));
+  
+  let message = "";
+  if (data.choices && data.choices[0] && data.choices[0].message) {
+    message = data.choices[0].message.content || "";
+  } else if (data.message) {
+    // Альтернативный формат ответа
+    message = data.message;
   }
-  console.log(`[Mistral] Text generation model: ${modelUsed}, длина ответа: ${message.length}`);
+  
+  // Убеждаемся, что message - строка
+  if (typeof message !== 'string') {
+    console.warn('[Mistral] Ответ не является строкой:', typeof message, message);
+    message = String(message || "");
+  }
+  
+  if (!message || message.trim().length === 0) {
+    console.warn('[Mistral] Пустой ответ от API. Полный ответ:', JSON.stringify(data));
+    message = ""; // Возвращаем пустую строку вместо undefined
+  }
+  
+  console.log(`[Mistral] Text generation model: ${modelUsed}, длина ответа: ${message.length}, первые 100 символов: ${message.substring(0, 100)}`);
   return message;
 }
 
