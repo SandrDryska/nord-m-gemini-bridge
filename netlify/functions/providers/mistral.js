@@ -11,11 +11,21 @@ async function generateTextWithMistral(apiKey, input) {
     systemPrompt = systemMsg ? (systemMsg.text || "") : "";
     // Фильтруем и валидируем сообщения
     messages = input
-      .filter(m => m.role !== 'system' && m.text && m.text.trim())
-      .map(msg => ({
-        role: msg.role === 'assistant' ? 'assistant' : 'user',
-        content: msg.text.trim()
-      }));
+      .filter(m => {
+        if (m.role === 'system') return false;
+        // Проверяем, что text существует и является строкой
+        if (!m.text) return false;
+        const textStr = typeof m.text === 'string' ? m.text : String(m.text || '');
+        return textStr.trim().length > 0;
+      })
+      .map(msg => {
+        // Безопасное преобразование в строку
+        const textStr = typeof msg.text === 'string' ? msg.text : String(msg.text || '');
+        return {
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          content: textStr.trim()
+        };
+      });
     
     // Убеждаемся, что последнее сообщение от пользователя
     if (messages.length > 0 && messages[messages.length - 1].role !== 'user') {
