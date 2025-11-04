@@ -84,23 +84,39 @@ async function generateTextWithMistral(apiKey, input) {
   // Логируем структуру ответа для отладки
   console.log('[Mistral] Структура ответа API:', JSON.stringify(data, null, 2).substring(0, 500));
   
-  let message = "";
-  if (data.choices && data.choices[0] && data.choices[0].message) {
-    message = data.choices[0].message.content || "";
-  } else if (data.message) {
-    // Альтернативный формат ответа
-    message = data.message;
+  // Унифицированное извлечение текста из message.content (строка | массив частей)
+  function extractTextFromMessage(msg) {
+    if (!msg) return '';
+    const content = msg.content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      try {
+        return content
+          .filter(part => part && part.type === 'text' && typeof part.text === 'string')
+          .map(part => part.text)
+          .join('');
+      } catch (_) {
+        return '';
+      }
+    }
+    return '';
   }
   
-  // Убеждаемся, что message - строка
+  let message = '';
+  if (data?.choices?.[0]?.message) {
+    message = extractTextFromMessage(data.choices[0].message);
+  } else if (data?.message) {
+    message = typeof data.message === 'string' ? data.message : extractTextFromMessage(data.message);
+  }
+  
   if (typeof message !== 'string') {
-    console.warn('[Mistral] Ответ не является строкой:', typeof message, message);
-    message = String(message || "");
+    console.warn('[Mistral] Ответ не является строкой, принудительное преобразование');
+    message = String(message || '');
   }
   
   if (!message || message.trim().length === 0) {
     console.warn('[Mistral] Пустой ответ от API. Полный ответ:', JSON.stringify(data));
-    message = ""; // Возвращаем пустую строку вместо undefined
+    message = '';
   }
   
   console.log(`[Mistral] Text generation model: ${modelUsed}, длина ответа: ${message.length}, первые 100 символов: ${message.substring(0, 100)}`);
